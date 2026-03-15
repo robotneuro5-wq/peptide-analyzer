@@ -4,10 +4,29 @@ import pandas as pd
 import io
 import re
 import plotly.express as px
+import plotly.io as pio
 from rdkit import Chem
 from rdkit.Chem.Draw import rdMolDraw2D
 from rdkit.Chem import rdDepictor
 import streamlit.components.v1 as components
+
+# Скрываем аватар, кнопку "Deploy" и другие элементы интерфейса Cloud
+hide_style = """
+    <style>
+    /* Скрывает иконку GitHub в верхнем углу */
+    #GithubIcon {visibility: hidden;}
+    
+    /* Скрывает аватар профиля в нижнем углу (новое в Community Cloud) */
+    div[data-testid="stStatusWidget"] {visibility: hidden;}
+    
+    /* Скрывает кнопку Deploy и верхнюю панель */
+    header {visibility: hidden;}
+    
+    /* Скрывает футер "Made with Streamlit" */
+    footer {visibility: hidden;}
+    </style>
+"""
+st.markdown(hide_style, unsafe_allow_html=True)
 
 # --- 1. ФУНКЦИИ РАСЧЕТА ---
 def calculate_dihedral(p1, p2, p3, p4):
@@ -20,7 +39,6 @@ def calculate_dihedral(p1, p2, p3, p4):
     w = b2 - np.dot(b2, b1) * b1
     x = np.dot(v, w)
     y = np.dot(np.cross(b1, v), w)
-    # Возвращаем float, округленный до 1 знака
     return round(float(np.degrees(np.arctan2(y, x))), 1)
 
 def parse_mol2_and_get_mol(file_content):
@@ -67,7 +85,6 @@ def render_static_svg(mol, heavy_atom_names, bond_len, font_size, pan_x, pan_y, 
     d2d.FinishDrawing()
     svg = d2d.GetDrawingText()
     
-    # Применяем трансформации (смещение и зум) через главный контейнер <g>
     transform = f"transform='translate({pan_x}, {pan_y}) scale({zoom})'"
     svg = svg.replace('<g>', f'<g {transform}>', 1)
     svg = re.sub(r'width=[\'"].*?[\'"]', 'width="100%"', svg)
@@ -133,7 +150,6 @@ if uploaded_file:
             with data_col:
                 st.subheader("📄 Результаты")
                 
-                # Принудительное отображение .0 для всех чисел в таблице Streamlit
                 st.dataframe(
                     res_df.style.format({"Phi (φ)": "{:.1f}", "Psi (ψ)": "{:.1f}"}),
                     use_container_width=True, 
@@ -141,13 +157,12 @@ if uploaded_file:
                     height=500
                 )
                 
-                # Генерация Excel с сохранением формата
+                # Генерация Excel
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     res_df.to_excel(writer, index=False, sheet_name='Angles')
                     workbook  = writer.book
                     worksheet = writer.sheets['Angles']
-                    # Формат ячеек для Excel (всегда показывать один знак после запятой)
                     fmt = workbook.add_format({'num_format': '0.0'})
                     worksheet.set_column('B:C', 15, fmt)
                 
@@ -161,7 +176,6 @@ if uploaded_file:
             with plot_col:
                 st.subheader("📈 Двумерный график")
                 
-                # Создаем векторный интерактивный график
                 fig = px.scatter(
                     res_df, 
                     x="Phi (φ)", 
@@ -177,19 +191,35 @@ if uploaded_file:
                     textposition='top center'
                 )
                 
-                # Настройка осей и зума
                 fig.update_layout(
                     xaxis=dict(range=[-185, 185], dtick=45, gridcolor='#f0f0f0'),
                     yaxis=dict(range=[-185, 185], dtick=45, gridcolor='#f0f0f0'),
                     height=550,
-                    dragmode='pan' # Режим перемещения "рукой" по умолчанию
+                    dragmode='pan'
                 )
                 
-                # Вспомогательные линии осей
                 fig.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.2)
                 fig.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.2)
                 
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption("💡 **Управление:** Используйте колесико мыши для зума. Кнопки в углу графика позволяют сбросить вид.")
+
+                # --- НОВОЕ: Кнопка сохранения интерактивного графика ---
+                html_plot = pio.to_html(
+                    fig, 
+                    include_plotlyjs='cdn', 
+                    full_html=True,
+                    config={'responsive': True}
+                )
+                
+                st.download_button(
+                    label="💾 Сохранить интерактивный график (.html)",
+                    data=html_plot,
+                    file_name="ramachandran_plot.html",
+                    mime="text/html",
+                    key="download_plot_html"
+                )
+                st.info("💡 Скачанный `.html` файл можно открыть в любом браузере. Он полностью интерактивен.")
+
         else:
             st.warning("⚠️ Выберите по 4 атома для Phi и Psi, чтобы сформировать расчеты.")
