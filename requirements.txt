@@ -4,4 +4,3 @@ pandas
 plotly
 rdkit
 xlsxwriter
-kaleido==0.1.0post1
